@@ -1,0 +1,30 @@
+{
+  "name": "berrry-committer",
+  "version": "1.0.0",
+  "description": "AI-powered GitHub automation tool that processes issues and generates code automatically using Claude",
+  "main": "script.js",
+  "scripts": {
+    "test": "node test/e2e.test.js",
+    "test:clean": "rm -rf test-output generated && npm test",
+    "lint": "echo 'No linter configured'",
+    "start": "node script.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Strawberry-Computer/berrry-committer.git"
+  },
+  "keywords": [
+    "ai",
+    "github",
+    "automation",
+    "claude",
+    "code-generation"
+  ],
+  "author": "Strawberry Computer",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {},
+  "dependencies": {}
+}

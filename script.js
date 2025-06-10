@@ -4,10 +4,83 @@ const fs = require('fs').promises;
 const path = require('path');
 const { execSync } = require('child_process');
 
+// Parse command line arguments
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const options = {
+    prompt: false,
+    help: false,
+    promptText: ''
+  };
+  
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '-p' || arg === '--prompt') {
+      options.prompt = true;
+      // If next arg exists and doesn't start with -, use it as prompt text
+      if (args[i + 1] && !args[i + 1].startsWith('-')) {
+        options.promptText = args[i + 1];
+        i++; // Skip next arg since we consumed it
+      }
+    } else if (arg === '-h' || arg === '--help') {
+      options.help = true;
+    }
+  }
+  
+  return options;
+}
+
+function showHelp() {
+  console.log(`
+🍓 Berrry Committer - AI-powered code generation
+
+Usage:
+  node script.js                    # GitHub Actions mode (requires GITHUB_EVENT_PATH)
+  node script.js -p "prompt text"   # Direct prompting with text
+  node script.js --prompt           # Direct prompting via stdin
+  echo "prompt" | node script.js -p # Direct prompting via pipe
+
+Options:
+  -p, --prompt [text]   Enable direct prompting mode
+  -h, --help           Show this help message
+
+Environment Variables:
+  ANTHROPIC_API_KEY     API key for Anthropic Claude
+  OPENROUTER_API_KEY    API key for OpenRouter (alternative)
+  YOLO=true            Skip confirmations (auto-execute)
+  MODEL                Custom model name
+  TEST_COMMAND         Command to run for validation
+
+Examples:
+  node script.js -p "Create a todo app with React"
+  echo "Build a calculator" | node script.js --prompt
+  node script.js -p < my_request.txt
+`);
+}
+
+// Read from stdin if needed
+async function readStdin() {
+  return new Promise((resolve) => {
+    let data = '';
+    
+    // Check if stdin has data
+    if (process.stdin.isTTY) {
+      resolve(''); // No piped input
+      return;
+    }
+    
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', chunk => data += chunk);
+    process.stdin.on('end', () => resolve(data.trim()));
+  });
+}
+
 class AICoder {
-  constructor() {
+  constructor(options = {}) {
     this.maxSteps = 5;
     this.currentStep = 0;
+    this.promptMode = options.prompt || false;
+    this.promptText = options.promptText || '';
     
     // API configuration with defaults
     this.apiUrl = process.env.API_URL || 'https://openrouter.ai/api/v1/chat/completions';
@@ -64,46 +137,68 @@ class AICoder {
   }
 
   async getIssueContext() {
-    // GitHub Actions provides event details via GITHUB_EVENT_PATH
-    const eventPath = process.env.GITHUB_EVENT_PATH;
-    if (!eventPath) {
-      throw new Error('GITHUB_EVENT_PATH not found - not running in GitHub Actions?');
-    }
-    
-    const event = JSON.parse(await fs.readFile(eventPath, 'utf8'));
-    
-    // Extract relevant information based on event type
-    let issueBody = '';
-    let commentBody = '';
-    let issueTitle = '';
-    let issueNumber = null;
-    
-    if (event.issue) {
-      // Issue event (opened, edited) or issue_comment event
-      issueTitle = event.issue.title || '';
-      issueBody = event.issue.body || '';
-      issueNumber = event.issue.number;
+    if (this.promptMode) {
+      // Direct prompting mode
+      let promptText = this.promptText;
       
-      if (event.comment) {
-        // This is an issue_comment event
-        commentBody = event.comment.body || '';
+      // If no prompt text provided, try to read from stdin
+      if (!promptText) {
+        promptText = await readStdin();
       }
+      
+      if (!promptText) {
+        throw new Error('No prompt provided. Use -p "your prompt" or pipe text to stdin.');
+      }
+      
+      return {
+        title: 'Direct Prompt',
+        number: 1,
+        description: promptText,
+        comment: '',
+        fullContext: promptText
+      };
+    } else {
+      // GitHub Actions mode
+      const eventPath = process.env.GITHUB_EVENT_PATH;
+      if (!eventPath) {
+        throw new Error('GITHUB_EVENT_PATH not found - not running in GitHub Actions? Use -p for direct prompting.');
+      }
+      
+      const event = JSON.parse(await fs.readFile(eventPath, 'utf8'));
+      
+      // Extract relevant information based on event type
+      let issueBody = '';
+      let commentBody = '';
+      let issueTitle = '';
+      let issueNumber = null;
+      
+      if (event.issue) {
+        // Issue event (opened, edited) or issue_comment event
+        issueTitle = event.issue.title || '';
+        issueBody = event.issue.body || '';
+        issueNumber = event.issue.number;
+        
+        if (event.comment) {
+          // This is an issue_comment event
+          commentBody = event.comment.body || '';
+        }
+      }
+      
+      // Build the full context string that will be sent to the LLM
+      const fullContext = [
+        `Title: ${issueTitle}`,
+        issueBody ? `Description: ${issueBody}` : '',
+        commentBody ? `Comment: ${commentBody}` : ''
+      ].filter(Boolean).join('\n\n');
+      
+      return {
+        title: issueTitle,
+        number: issueNumber,
+        description: issueBody,
+        comment: commentBody,
+        fullContext: fullContext
+      };
     }
-    
-    // Build the full context string that will be sent to the LLM
-    const fullContext = [
-      `Title: ${issueTitle}`,
-      issueBody ? `Description: ${issueBody}` : '',
-      commentBody ? `Comment: ${commentBody}` : ''
-    ].filter(Boolean).join('\n\n');
-    
-    return {
-      title: issueTitle,
-      number: issueNumber,
-      description: issueBody,
-      comment: commentBody,
-      fullContext: fullContext
-    };
   }
 
   async getRepoContext(issueContext) {
@@ -244,6 +339,36 @@ Only include files that need to be created or completely replaced. Focus on maki
     return content;
   }
 
+  parseUnifiedResponse(response) {
+    const sections = {};
+    
+    // Extract DESIGN section
+    const designMatch = response.match(/## DESIGN\s*\n([\s\S]*?)(?=\n##|$)/);
+    if (designMatch) {
+      sections.design = designMatch[1].trim();
+    }
+    
+    // Extract ANALYSIS section
+    const analysisMatch = response.match(/## ANALYSIS\s*\n([\s\S]*?)(?=\n##|$)/);
+    if (analysisMatch) {
+      sections.analysis = analysisMatch[1].trim();
+    }
+    
+    // Extract CODE section
+    const codeMatch = response.match(/## CODE\s*\n([\s\S]*?)(?=\n##|$)/);
+    if (codeMatch) {
+      sections.code = codeMatch[1].trim();
+    }
+    
+    // Extract EVAL section
+    const evalMatch = response.match(/## EVAL\s*\n```bash\s*\n([\s\S]*?)\n```/);
+    if (evalMatch) {
+      sections.eval = evalMatch[1].trim();
+    }
+    
+    return sections;
+  }
+
   async generateTestScript(issueContext) {
     const prompt = `Generate a bash script to validate if we're ready to create a PR:
 
@@ -289,6 +414,29 @@ Return just the bash script content:`;
     }
 
     return files;
+  }
+
+  async commitFiles(files, issueTitle) {
+    if (files.length === 0) return;
+    
+    try {
+      // Add files to git
+      for (const file of files) {
+        execSync(`git add "${file}"`);
+      }
+      
+      // Create commit message
+      const commitMessage = `Generate code for: ${issueTitle}
+
+Files: ${files.join(', ')}
+
+🤖 Generated by AI Code Generator`;
+      
+      execSync(`git commit -m "${commitMessage}"`);
+      console.log(`📝 Committed ${files.length} files`);
+    } catch (error) {
+      console.log(`⚠️ Commit failed: ${error.message}`);
+    }
   }
 
   async promptUser(question) {
@@ -435,6 +583,14 @@ Return just the bash script content:`;
       console.log('\n🚀 Pushing commits and creating PR...');
       await this.pushAndCreatePR(issueContext);
       
+      console.log('🎉 AI Code Generator completed!');
+      
+    } catch (error) {
+      console.error('❌ Error:', error.message);
+      process.exit(1);
+    }
+  }
+
   async pushAndCreatePR(issueContext) {
     try {
       // Create branch name from issue title
@@ -465,17 +621,35 @@ Return just the bash script content:`;
       console.log(`⚠️ Push/PR creation failed: ${error.message}`);
     }
   }
-      
-      console.log('🎉 AI Code Generator completed!');
-      
+
+  async createPullRequest(branchName, issueContext) {
+    try {
+      // This would typically use GitHub API to create PR
+      // For local testing, we'll just log what would happen
+      console.log(`🔗 Would create PR:`);
+      console.log(`   From: ${branchName}`);
+      console.log(`   To: main`);
+      console.log(`   Title: ${issueContext.title}`);
+      console.log(`   Body: Resolves #${issueContext.number}`);
+      return false; // Indicates manual creation needed
     } catch (error) {
-      console.error('❌ Error:', error.message);
-      process.exit(1);
+      console.log(`⚠️ PR creation failed: ${error.message}`);
+      return false;
     }
   }
 }
 
 // Run if called directly
 if (require.main === module) {
-  new AICoder().run();
+  const options = parseArgs();
+  
+  if (options.help) {
+    showHelp();
+    process.exit(0);
+  }
+  
+  new AICoder(options).run().catch(error => {
+    console.error('❌ Error:', error.message);
+    process.exit(1);
+  });
 }
