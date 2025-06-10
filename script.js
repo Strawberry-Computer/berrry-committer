@@ -85,7 +85,7 @@ class AICoder {
     // API configuration with defaults
     this.apiUrl = process.env.API_URL || 'https://openrouter.ai/api/v1/chat/completions';
     this.apiKey = process.env.ANTHROPIC_API_KEY || process.env.OPENROUTER_API_KEY;
-    this.model = process.env.MODEL || 'anthropic/claude-4-sonnet';
+    this.model = process.env.MODEL || 'anthropic/claude-sonnet-4';
     this.commitModel = process.env.COMMIT_MODEL || 'anthropic/claude-3.5-haiku';
     
     // Configuration
@@ -122,6 +122,15 @@ class AICoder {
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`API Error Details:`, {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText,
+        url: this.baseUrl,
+        model: model || this.model,
+        hasApiKey: !!this.apiKey
+      });
       throw new Error(`API call failed: ${response.status} ${response.statusText}`);
     }
 
@@ -329,40 +338,12 @@ Only include files that need to be created or completely replaced. Focus on maki
     return content;
   }
 
-  parseUnifiedResponse(response) {
-    const sections = {};
-    
-    // Extract DESIGN section
-    const designMatch = response.match(/## DESIGN\s*\n([\s\S]*?)(?=\n##|$)/);
-    if (designMatch) {
-      sections.design = designMatch[1].trim();
-    }
-    
-    // Extract ANALYSIS section
-    const analysisMatch = response.match(/## ANALYSIS\s*\n([\s\S]*?)(?=\n##|$)/);
-    if (analysisMatch) {
-      sections.analysis = analysisMatch[1].trim();
-    }
-    
-    // Extract CODE section
-    const codeMatch = response.match(/## CODE\s*\n([\s\S]*?)(?=\n##|$)/);
-    if (codeMatch) {
-      sections.code = codeMatch[1].trim();
-    }
-    
-    // Extract EVAL section
-    const evalMatch = response.match(/## EVAL\s*\n```bash\s*\n([\s\S]*?)\n```/);
-    if (evalMatch) {
-      sections.eval = evalMatch[1].trim();
-    }
-    
-    return sections;
-  }
 
 
   async parseAndWriteFiles(codeOutput) {
     const files = [];
-    const fileRegex = /=== FILENAME: (.+?) ===\n([\s\S]*?)\n=== END ===/g;
+    const parsedFiles = {};
+    const fileRegex = /=== FILENAME: (.+?) ===\s*\n([\s\S]*?)\n=== END: \1 ===/g;
     let match;
 
     while ((match = fileRegex.exec(codeOutput)) !== null) {
@@ -377,10 +358,11 @@ Only include files that need to be created or completely replaced. Focus on maki
       
       await fs.writeFile(filename, content);
       files.push(filename);
+      parsedFiles[filename] = content;
       console.log(`Created/updated: ${filename}`);
     }
 
-    return files;
+    return { files, parsedFiles };
   }
 
   async commitFiles(files, issueContext) {
@@ -395,7 +377,10 @@ Only include files that need to be created or completely replaced. Focus on maki
       // Generate AI commit message
       const commitMessage = await this.generateCommitMessage(files, issueContext);
       
-      execSync(`git commit -m "${commitMessage}"`);
+      // Write commit message to file to handle special characters and newlines
+      await fs.writeFile('.git_commit_msg', commitMessage);
+      execSync('git commit -F .git_commit_msg');
+      await fs.unlink('.git_commit_msg');
       console.log(`📝 Committed ${files.length} files`);
     } catch (error) {
       console.log(`⚠️ Commit failed: ${error.message}`);
@@ -506,21 +491,8 @@ Generate a conventional commit message. Be descriptive but concise.`;
           designContext
         );
         
-        const sections = this.parseUnifiedResponse(unifiedResponse);
-        
-        // Capture design context for future steps (don't save to file)
-        if (sections.design && !designContext) {
-          console.log('🏗️  Design generated for complex issue');
-          designContext = sections.design;
-        }
-        
-        // Display analysis
-        if (sections.analysis) {
-          console.log('📊 Analysis:', sections.analysis.slice(0, 200) + '...');
-        }
-        
         // Process files
-        const files = await this.parseAndWriteFiles(sections.code || '');
+        const { files, parsedFiles } = await this.parseAndWriteFiles(unifiedResponse);
         
         if (files.length === 0) {
           console.log('No files to update, stopping...');
@@ -530,10 +502,11 @@ Generate a conventional commit message. Be descriptive but concise.`;
         // Commit files immediately after each LLM generation
         await this.commitFiles(files, issueContext);
         
-        // Run evaluation if provided
-        if (sections.eval) {
-          const evalResult = await this.runEvalScript(sections.eval);
-          console.log('📊 Evaluation result:');
+        // Run evaluation if eval.sh was created
+        if (files.includes('eval.sh')) {
+          const evalScript = parsedFiles['eval.sh'];
+          const evalResult = await this.runEvalScript(evalScript);
+          console.log('🧪 Eval Result:');
           console.log(evalResult.output);
           
           // Check exit code - 0 means ready for PR
