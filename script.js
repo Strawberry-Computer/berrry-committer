@@ -572,8 +572,9 @@ Files: ${files.join(', ')}
           console.log('✅ All tests passing!');
           console.log(testResult);
         } catch (error) {
-          console.log('⚠️ Tests failed - but continuing with PR creation');
-          console.log(error.message);
+          console.error('❌ Tests failed - stopping execution');
+          console.error(error.message);
+          throw new Error(`Test validation failed: ${error.message}`);
         }
       } else {
         console.log('📋 No test command configured - assuming tests pass');

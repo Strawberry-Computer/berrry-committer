@@ -48,11 +48,16 @@ jobs:
           echo "📋 Event: ${{ github.event_name }}"
           echo "🔗 Issue/PR: ${{ github.event.issue.number || github.event.pull_request.number }}"
           
-          # Run the AI coder script
-          node script.js
+          # Run the AI coder script and capture exit code
+          if ! node script.js; then
+            echo "❌ AI Code Generator failed"
+            exit 1
+          fi
+          
+          echo "✅ AI Code Generator completed successfully"
       
       - name: Create Pull Request (if needed)
-        if: failure() == false
+        if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

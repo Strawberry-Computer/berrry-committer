@@ -31,13 +31,33 @@ class E2ETestRunner {
     execSync('git config user.email "test@example.com"', { cwd: tempDir });
     execSync('git config user.name "Test User"', { cwd: tempDir });
     
-    // Copy script to temp repo
-    const tempScriptPath = path.join(tempDir, 'script.js');
-    await fs.copyFile(this.scriptPath, tempScriptPath);
+    // Copy all required files to temp repo
+    const filesToCopy = [
+      'script.js',
+      'package.json', 
+      'test/e2e.test.js'
+    ];
+    
+    for (const file of filesToCopy) {
+      const sourcePath = path.join(this.baseDir, file);
+      const destPath = path.join(tempDir, file);
+      
+      try {
+        await fs.access(sourcePath);
+        // Create directory if needed
+        const destDir = path.dirname(destPath);
+        await fs.mkdir(destDir, { recursive: true });
+        // Copy file
+        await fs.copyFile(sourcePath, destPath);
+      } catch (e) {
+        // File doesn't exist, skip
+        console.warn(`Skipping ${file}: ${e.message}`);
+      }
+    }
     
     // Create initial commit
-    execSync('git add script.js', { cwd: tempDir });
-    execSync('git commit -m "Add script for testing"', { cwd: tempDir });
+    execSync('git add .', { cwd: tempDir });
+    execSync('git commit -m "Add project files for testing"', { cwd: tempDir });
     
     return tempDir;
   }
