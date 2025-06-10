@@ -99,3 +99,6 @@ The system automatically includes context from:
 - Branch naming: `ai/issue-title-normalized`
 - Auto-detects GitHub Actions vs local environment
 - Uses git config: `action@github.com` / `FastClaude AI` for commits
+
+## Development Guidance
+- Let's always run tests in tmp git repo instead of our repo

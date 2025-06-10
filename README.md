@@ -198,11 +198,29 @@ DEBUG=true node script.js
 - [CLAUDE.md](./CLAUDE.md) - Technical architecture guide for Claude Code
 - [dev.md](./dev.md) - Detailed local development guide
 
+## 🤖 AI-Assisted Development
+
+This project uses itself for development! You can request AI-generated code:
+
+### Quick Start
+1. **Create an issue** with title starting with `ai:` or `claude:`
+2. **Or mention** `@fastclaude` in issue descriptions
+3. **The AI will** analyze, code, test, and create a PR automatically
+
+### Examples
+```markdown
+ai: Add --version flag support
+@fastclaude Please improve error handling in the parser
+claude: Add Docker configuration for easy deployment
+```
+
+📖 **[Full AI Development Guide](docs/ai-development.md)**
+
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create your feature branch
-3. Test locally with mock GitHub events
+2. Create your feature branch (or use AI with `@fastclaude`)
+3. Test locally with `npm test`
 4. Submit a pull request
 
 ## 📄 License

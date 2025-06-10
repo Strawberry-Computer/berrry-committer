@@ -1,0 +1,65 @@
+name: AI Coder
+
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created]
+
+jobs:
+  ai-code:
+    # Only run if the issue/comment mentions @fastclaude or contains specific keywords
+    if: |
+      (github.event.issue && (contains(github.event.issue.body, '@fastclaude') || contains(github.event.issue.title, 'ai:') || contains(github.event.issue.title, 'claude:'))) ||
+      (github.event.comment && (contains(github.event.comment.body, '@fastclaude') || contains(github.event.comment.body, '/ai') || contains(github.event.comment.body, '/claude')))
+    
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Configure Git
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "Berrry Committer AI"
+      
+      - name: Run AI Coder
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TEST_COMMAND: "npm test"
+        run: |
+          echo "🤖 Starting AI Code Generation..."
+          echo "📋 Event: ${{ github.event_name }}"
+          echo "🔗 Issue/PR: ${{ github.event.issue.number || github.event.pull_request.number }}"
+          
+          # Run the AI coder script
+          node script.js
+      
+      - name: Create Pull Request (if needed)
+        if: failure() == false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if we're on a new branch (created by the AI coder)
+          current_branch=$(git branch --show-current)
+          if [ "$current_branch" != "main" ]; then
+            echo "📤 AI created branch: $current_branch"
+            echo "🔄 PR should have been created automatically by the script"
+          else
+            echo "📋 No new branch created, staying on main"
+          fi

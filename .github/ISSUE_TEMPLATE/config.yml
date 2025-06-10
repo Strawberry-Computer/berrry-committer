@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 📖 Documentation
+    url: https://github.com/Strawberry-Computer/berrry-committer/blob/main/README.md
+    about: Read the project documentation
+  - name: 🤖 AI Development Guide
+    url: https://github.com/Strawberry-Computer/berrry-committer/blob/main/CLAUDE.md
+    about: Technical guide for AI-assisted development
