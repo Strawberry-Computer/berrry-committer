@@ -282,60 +282,48 @@ class AICoder {
   }
 
   async generateUnifiedResponse(issueContext, repoContext, previousResult = '', designContext = '') {
-    const designSection = designContext ? `Previous design:\n${designContext}\n\n---\n` : `
-IF THIS ISSUE IS COMPLEX (multiple components, architecture changes, new systems):
-First create a design section with:
-## DESIGN
-### Plan
-- Step 1
-- Step 2
-...
+    const prompt = `
+<task>
+Generate a complete development step for this GitHub issue.
+</task>
 
-### Diagram
-[ASCII diagram showing components/flow]
-
-### Files
-- file1.js - purpose
-- file2.py - purpose
-
----
-`;
-
-    const prompt = `${designSection}
-Generate a complete development step for this GitHub issue:
-
+<issue>
 ${issueContext.fullContext}
+</issue>
 
-Repository context:
+<repo>
 ${repoContext}
+</repo>
 
-${previousResult ? `Previous step context:\n${previousResult}\n` : ''}
+${previousResult ? `<previous_step>\n${previousResult}\n</previous_step>` : ''}
 
-Provide a UNIFIED response with these sections:
+<response_format>
+=== FILENAME: DESIGN.md ===
+[write the design here for complex issues. don't even try to write code before you have a design]
+=== END: DESIGN.md ===
 
-## ANALYSIS
-Briefly analyze what needs to be done this step.
-
-## CODE
-Generate complete file contents. Format each file as:
 === FILENAME: path/to/file.ext ===
 [complete file content]
-=== END ===
+=== END: path/to/file.ext ===
 
-CRITICAL: You MUST provide the COMPLETE file content between the filename markers, not partial modifications or placeholders. If you need to modify an existing file, include the ENTIRE file content with your changes applied. Never use phrases like "rest of the file remains unchanged" or "existing code continues here" - always output the full, complete file.
-
-## EVAL
-Generate a bash script to gather context for the next step.
+=== FILENAME: eval.sh ===
+[
+write the eval script here. 
+it should be a bash script that can be run to validate the changes
++ fetch the context for the next step using grep, cat, etc.
 Use proper bash practices: set -euo pipefail at the start.
 Exit with code 0 if ready for PR, non-zero if needs more work.
-\`\`\`bash
-#!/bin/bash
-set -euo pipefail
-# Check what was created, find missing deps, scan for TODOs, detect syntax errors
-# Exit 0 if ready for PR, exit 1 if needs more work
-\`\`\`
+]
+=== END: eval.sh ===
+</response_format>
 
-Only include files that need to be created or completely replaced. Focus on making meaningful progress toward solving the issue.`;
+<instructions>
+CRITICAL: You MUST provide the COMPLETE file content between the filename markers, not partial modifications or placeholders.
+If you need to modify an existing file, include the ENTIRE file content with your changes applied. 
+Never use phrases like "rest of the file remains unchanged" or "existing code continues here" - always output the full, complete file.
+
+Only include files that need to be created or completely replaced. Focus on making meaningful progress toward solving the issue.
+</instructions>`;
 
     const content = await this.callLLM([{ role: 'user', content: prompt }]);
     return content;
