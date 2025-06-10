@@ -101,7 +101,7 @@ class AICoder {
     console.log(`⚡ YOLO Mode: ${this.yoloMode ? 'ON (auto-execute)' : 'OFF (manual confirm)'}`);
   }
 
-  async callLLM(messages, model = null, maxTokens = 6000) {
+  async callLLM(messages, model = null, maxTokens = 64000) {
     console.log('🧠 LLM Call:', model || this.model);
     console.log('📝 Prompt length:', JSON.stringify(messages).length, 'chars');
     
