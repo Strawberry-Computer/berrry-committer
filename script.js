@@ -85,7 +85,7 @@ class AICoder {
     // API configuration with defaults
     this.apiUrl = process.env.API_URL || 'https://openrouter.ai/api/v1/chat/completions';
     this.apiKey = process.env.ANTHROPIC_API_KEY || process.env.OPENROUTER_API_KEY;
-    this.model = process.env.MODEL || 'anthropic/claude-3.5-sonnet';
+    this.model = process.env.MODEL || 'anthropic/claude-4-sonnet';
     this.commitModel = process.env.COMMIT_MODEL || 'anthropic/claude-3.5-haiku';
     
     // Configuration
