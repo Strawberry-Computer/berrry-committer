@@ -307,7 +307,7 @@ ${repoContext}
 ${previousResult ? `<previous_step>\n${previousResult}\n</previous_step>` : ''}
 
 <response_example>
-=== FILENAME: DESIGN.md ===
+${'='.repeat(3)} FILENAME: DESIGN.md ${'='.repeat(3)}
 # User Authentication System Design
 
 ## Overview
@@ -338,9 +338,9 @@ Implement a secure user authentication system with JWT tokens and password hashi
 3. Add login functionality
 4. Create protected routes
 5. Add logout mechanism
-=== END: DESIGN.md ===
+${'='.repeat(3)} END: DESIGN.md ${'='.repeat(3)}
 
-=== FILENAME: src/models/User.js ===
+${'='.repeat(3)} FILENAME: src/models/User.js ${'='.repeat(3)}
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 
@@ -373,9 +373,9 @@ userSchema.pre('save', async function(next) {
 });
 
 module.exports = mongoose.model('User', userSchema);
-=== END: src/models/User.js ===
+${'='.repeat(3)} END: src/models/User.js ${'='.repeat(3)}
 
-=== FILENAME: eval.sh ===
+${'='.repeat(3)} FILENAME: eval.sh ${'='.repeat(3)}
 #!/bin/bash
 set -euo pipefail
 
@@ -404,7 +404,7 @@ echo "Password Hashing: $(grep -q 'bcrypt.hash' src/models/User.js && echo '✅'
 
 echo "✅ Basic validation passed!"
 exit 0
-=== END: eval.sh ===
+${'='.repeat(3)} END: eval.sh ${'='.repeat(3)}
 </response_example>
 
 <instructions>
@@ -558,8 +558,13 @@ Generate a conventional commit message. Be descriptive but concise.`;
       let previousResult = '';
       
       // Configure git user for commits
-      execSync('git config user.email "action@github.com"');
-      execSync('git config user.name "FastClaude AI"');
+      if (this.isGitHubActions) {
+        execSync('git config user.email "action@github.com"');
+        execSync('git config user.name "FastClaude AI"');
+      } else {
+        execSync('git config user.email "vgrichina@gmail.com"');
+        execSync('git config user.name "Vlad Grichina"');
+      }
       
       for (this.currentStep = 1; this.currentStep <= this.maxSteps; this.currentStep++) {
         console.log(`\n🔄 Step ${this.currentStep}/${this.maxSteps}`);
