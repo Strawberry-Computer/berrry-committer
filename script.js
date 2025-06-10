@@ -322,6 +322,8 @@ Generate complete file contents. Format each file as:
 [complete file content]
 === END ===
 
+CRITICAL: You MUST provide the COMPLETE file content between the filename markers, not partial modifications or placeholders. If you need to modify an existing file, include the ENTIRE file content with your changes applied. Never use phrases like "rest of the file remains unchanged" or "existing code continues here" - always output the full, complete file.
+
 ## EVAL
 Generate a bash script to gather context for the next step.
 Use proper bash practices: set -euo pipefail at the start.
