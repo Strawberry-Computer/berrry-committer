@@ -306,25 +306,106 @@ ${repoContext}
 
 ${previousResult ? `<previous_step>\n${previousResult}\n</previous_step>` : ''}
 
-<response_format>
+<response_example>
 === FILENAME: DESIGN.md ===
-[write the design here for complex issues. don't even try to write code before you have a design]
+# User Authentication System Design
+
+## Overview
+Implement a secure user authentication system with JWT tokens and password hashing.
+
+## Components
+1. User Model
+   - email (unique)
+   - hashedPassword
+   - createdAt
+   - lastLogin
+
+2. Auth Routes
+   - POST /auth/register
+   - POST /auth/login
+   - GET /auth/me
+   - POST /auth/logout
+
+3. Security Measures
+   - Password hashing with bcrypt
+   - JWT token expiration
+   - Rate limiting
+   - Input validation
+
+## Implementation Steps
+1. Set up user model and database schema
+2. Implement registration endpoint
+3. Add login functionality
+4. Create protected routes
+5. Add logout mechanism
 === END: DESIGN.md ===
 
-=== FILENAME: path/to/file.ext ===
-[complete file content]
-=== END: path/to/file.ext ===
+=== FILENAME: src/models/User.js ===
+const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
+
+const userSchema = new mongoose.Schema({
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+    lowercase: true
+  },
+  password: {
+    type: String,
+    required: true
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  lastLogin: {
+    type: Date
+  }
+});
+
+// Hash password before saving
+userSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
+  this.password = await bcrypt.hash(this.password, 10);
+  next();
+});
+
+module.exports = mongoose.model('User', userSchema);
+=== END: src/models/User.js ===
 
 === FILENAME: eval.sh ===
-[
-write the eval script here. 
-it should be a bash script that can be run to validate the changes
-+ fetch the context for the next step using grep, cat, etc.
-Use proper bash practices: set -euo pipefail at the start.
-Exit with code 0 if ready for PR, non-zero if needs more work.
-]
+#!/bin/bash
+set -euo pipefail
+
+echo "🔍 Running authentication system validation..."
+
+# Check if User model exists and has required fields
+if [ ! -f "src/models/User.js" ]; then
+  echo "❌ User model not found"
+  exit 1
+fi
+
+# Extract schema fields for next step
+echo "📋 Current schema fields:"
+cat src/models/User.js | grep -A 10 "userSchema = new mongoose.Schema"
+
+# Check for password hashing
+if ! grep -q "bcrypt.hash" "src/models/User.js"; then
+  echo "❌ Password hashing not implemented"
+  exit 1
+fi
+
+# Get current implementation status for next step
+echo "📊 Implementation status:"
+echo "User Model: $(grep -q 'mongoose.Schema' src/models/User.js && echo '✅' || echo '❌')"
+echo "Password Hashing: $(grep -q 'bcrypt.hash' src/models/User.js && echo '✅' || echo '❌')"
+
+echo "✅ Basic validation passed!"
+exit 0
 === END: eval.sh ===
-</response_format>
+</response_example>
 
 <instructions>
 CRITICAL: You MUST provide the COMPLETE file content between the filename markers, not partial modifications or placeholders.
