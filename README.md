@@ -48,9 +48,12 @@ jobs:
 ```bash
 # 1. Set up environment
 export ANTHROPIC_API_KEY="your-api-key"
-export GITHUB_EVENT_PATH="/tmp/test_event.json"
 
-# 2. Create test issue
+# 2. Direct prompting mode (new!)
+node script.js -p "Create a login component with email/password validation"
+
+# 3. GitHub event mode
+export GITHUB_EVENT_PATH="/tmp/test_event.json"
 cat > /tmp/test_event.json << 'EOF'
 {
   "issue": {
@@ -60,8 +63,6 @@ cat > /tmp/test_event.json << 'EOF'
   }
 }
 EOF
-
-# 3. Run locally (safe mode with confirmations)
 node script.js
 
 # 4. Or run in YOLO mode (auto-execute)
@@ -76,7 +77,7 @@ YOLO=true node script.js
 |----------|----------|---------|-------------|
 | `ANTHROPIC_API_KEY` | Yes* | - | Anthropic API key |
 | `OPENROUTER_API_KEY` | Yes* | - | OpenRouter API key (alternative) |
-| `MODEL` | No | `anthropic/claude-3.5-sonnet` | Main LLM model |
+| `MODEL` | No | `anthropic/claude-sonnet-4` | Main LLM model |
 | `COMMIT_MODEL` | No | `anthropic/claude-3.5-haiku` | Model for commit messages |
 | `TEST_COMMAND` | No | - | Command to run for validation |
 | `YOLO` | No | `false` | Skip confirmations (auto `true` in Actions) |
@@ -119,7 +120,7 @@ import React from 'react';
 export const Login = () => {
   // Component implementation
 };
-=== END ===
+=== END: src/components/Login.tsx ===
 
 ## EVAL
 ```bash

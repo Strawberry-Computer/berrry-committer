@@ -18,7 +18,7 @@ The main entry point is `script.js` - a Node.js application that:
 
 ### Key Components
 
-- **AICoder Class** (`script.js:7-476`): Main orchestrator
+- **AICoder Class**: Main orchestrator class in script.js
 - **API Integration**: Uses OpenRouter or Anthropic API for LLM calls
 - **File Generation**: Parses `=== FILENAME: path ===` format from LLM responses
 - **Evaluation System**: Runs bash scripts to validate progress
@@ -31,7 +31,7 @@ The main entry point is `script.js` - a Node.js application that:
 - `GITHUB_EVENT_PATH`: Path to GitHub event JSON (auto-set in Actions)
 
 ### Optional Configuration
-- `MODEL`: LLM model (default: `anthropic/claude-3.5-sonnet`)
+- `MODEL`: LLM model (default: `anthropic/claude-sonnet-4`)
 - `COMMIT_MODEL`: Model for commit messages (default: `anthropic/claude-3.5-haiku`)
 - `TEST_COMMAND`: Command to run for final validation
 - `YOLO`: Set to "true" to skip confirmations in local mode
@@ -67,7 +67,7 @@ The LLM must output code in this exact format:
 ```
 === FILENAME: path/to/file.ext ===
 [complete file content]
-=== END ===
+=== END: path/to/file.ext ===
 ```
 
 Multiple files can be generated in a single response. The system automatically creates directories and writes files.
