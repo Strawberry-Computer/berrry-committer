@@ -2,12 +2,22 @@
   "name": "berrry-committer",
   "version": "1.0.0",
   "description": "AI-powered GitHub automation tool that processes issues and generates code automatically using Claude",
-  "main": "script.js",
+  "main": "src/main.js",
+  "bin": {
+    "berrry": "./bin/berrry"
+  },
+  "files": [
+    "src/",
+    "bin/",
+    "README.md",
+    "CLAUDE.md"
+  ],
   "scripts": {
     "test": "node test/e2e.test.js",
     "test:clean": "rm -rf test-output generated && npm test",
     "lint": "echo 'No linter configured'",
-    "start": "node script.js"
+    "start": "node bin/berrry",
+    "dev": "node bin/berrry"
   },
   "repository": {
     "type": "git",

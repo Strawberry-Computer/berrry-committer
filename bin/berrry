@@ -1,0 +1,111 @@
+#!/usr/bin/env node
+
+const path = require('path');
+const { main, mainWithPrompt } = require('../src/main.js');
+
+// Parse command line arguments
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const options = {
+    prompt: false,
+    help: false,
+    promptText: ''
+  };
+  
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '-p' || arg === '--prompt') {
+      options.prompt = true;
+      // If next arg exists and doesn't start with -, use it as prompt text
+      if (args[i + 1] && !args[i + 1].startsWith('-')) {
+        options.promptText = args[i + 1];
+        i++; // Skip next arg since we consumed it
+      }
+    } else if (arg === '-h' || arg === '--help') {
+      options.help = true;
+    }
+  }
+  
+  return options;
+}
+
+function showHelp() {
+  console.log(`
+🍓 Berrry Committer - AI-powered code generation
+
+Usage:
+  berrry                        # GitHub Actions mode (requires GITHUB_EVENT_PATH)
+  berrry -p "prompt text"       # Direct prompting with text
+  berrry --prompt               # Direct prompting via stdin
+  echo "prompt" | berrry -p     # Direct prompting via pipe
+
+Options:
+  -p, --prompt [text]   Enable direct prompting mode
+  -h, --help           Show this help message
+
+Environment Variables:
+  ANTHROPIC_API_KEY     API key for Anthropic Claude
+  OPENROUTER_API_KEY    API key for OpenRouter (alternative)
+  YOLO=true            Skip confirmations (auto-execute)
+  MODEL                Custom LLM model (default: anthropic/claude-sonnet-4)
+  COMMIT_MODEL         Custom commit model (default: anthropic/claude-3.5-haiku)
+`);
+}
+
+async function readStdin() {
+  return new Promise((resolve) => {
+    let data = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('readable', () => {
+      let chunk;
+      while ((chunk = process.stdin.read()) !== null) {
+        data += chunk;
+      }
+    });
+    
+    process.stdin.on('end', () => {
+      resolve(data.trim());
+    });
+  });
+}
+
+async function runCLI() {
+  const args = parseArgs();
+  
+  if (args.help) {
+    showHelp();
+    return;
+  }
+
+  try {
+    if (args.prompt) {
+      // Direct prompting mode
+      let promptText = args.promptText;
+      
+      if (!promptText) {
+        // Try to read from stdin
+        promptText = await readStdin();
+      }
+      
+      if (!promptText) {
+        console.error('❌ No prompt provided. Use -p "your prompt" or pipe text to stdin.');
+        process.exit(1);
+      }
+      
+      await mainWithPrompt(promptText);
+    } else {
+      // GitHub Actions mode
+      if (!process.env.GITHUB_EVENT_PATH) {
+        console.error('❌ GITHUB_EVENT_PATH not found. Use -p for direct prompting or run in GitHub Actions.');
+        process.exit(1);
+      }
+      
+      await main();
+    }
+  } catch (error) {
+    console.error('❌ Error:', error.message);
+    process.exit(1);
+  }
+}
+
+runCLI().catch(console.error);
