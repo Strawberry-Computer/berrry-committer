@@ -24,7 +24,8 @@ async function parseAndWriteFiles(response, options = {}) {
         files.push({ path: currentFile, content });
       }
       
-      currentFile = line.replace('=== FILENAME: ', '').trim();
+      // Extract filename properly - remove prefix and suffix markers
+      currentFile = line.replace('=== FILENAME: ', '').replace(/ +===.*$/, '').trim();
       currentContent = [];
       inFile = true;
     } else if (line.startsWith('=== END: ')) {
