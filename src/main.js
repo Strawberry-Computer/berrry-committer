@@ -1,203 +1,99 @@
-const { callLLM, generateCommitMessage } = require('./llm-client.js');
-const { getIssueContext, getRepoContext, extractMentionedFiles, getMentionedFilesContent } = require('./context-generator.js');
-const { commitFiles, getCurrentBranch, createBranch, pushAndCreatePR, generateBranchName } = require('./git-operations.js');
-const { parseAndWriteFiles, runEvalScript, hasEvalScript } = require('./file-processor.js');
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
+const { LLMClient } = require('./llm-client.js');
+const { getIssueContext, getRepoContext } = require('./context-generator.js');
+const { parseAndWriteFiles, runEvalScript } = require('./file-processor.js');
 
-function createConfig(options = {}) {
-  return {
-    apiKey: process.env.ANTHROPIC_API_KEY || process.env.OPENROUTER_API_KEY,
-    model: process.env.MODEL || 'anthropic/claude-sonnet-4',
-    commitModel: process.env.COMMIT_MODEL || 'anthropic/claude-3.5-haiku',
-    apiUrl: process.env.API_URL || 'https://openrouter.ai/api/v1/chat/completions',
-    testCommand: process.env.TEST_COMMAND,
-    isGitHubActions: !!process.env.GITHUB_ACTIONS,
-    yoloMode: process.env.YOLO === 'true' || !!process.env.GITHUB_ACTIONS,
-    maxSteps: 5,
-    ...options
-  };
-}
-
-async function main(options = {}) {
-  const config = createConfig(options);
-  
-  if (!config.apiKey) {
-    throw new Error('API key required: set ANTHROPIC_API_KEY or OPENROUTER_API_KEY');
-  }
-  
-  console.log('\n🍓 Berrry Committer - Starting AI code generation...');
-  console.log(`🏃 Running in: ${config.isGitHubActions ? 'GitHub Actions' : 'Local Development'}`);
-  console.log(`🤖 Using model: ${config.model}`);
-  console.log(`⚡ YOLO mode: ${config.yoloMode ? 'ON' : 'OFF'}`);
-  
-  try {
-    // Get issue context from GitHub event
-    const issueContext = await getIssueContext();
-    console.log(`📋 Processing: ${issueContext.title}`);
+class AICoder {
+  constructor(options = {}) {
+    this.options = {
+      verbose: false,
+      yolo: process.env.YOLO === 'true',
+      ...options
+    };
     
-    await processIssue(issueContext, config);
-  } catch (error) {
-    console.error('❌ Error:', error.message);
-    process.exit(1);
-  }
-}
-
-async function mainWithPrompt(promptText, options = {}) {
-  const config = createConfig(options);
-  
-  if (!config.apiKey) {
-    throw new Error('API key required: set ANTHROPIC_API_KEY or OPENROUTER_API_KEY');
-  }
-  
-  console.log('\n🍓 Berrry Committer - Direct prompting mode...');
-  console.log(`🏃 Running in: ${config.isGitHubActions ? 'GitHub Actions' : 'Local Development'}`);
-  console.log(`🤖 Using model: ${config.model}`);
-  console.log(`⚡ YOLO mode: ${config.yoloMode ? 'ON' : 'OFF'}`);
-  
-  try {
-    const issueContext = await getIssueContext(null, { 
-      promptMode: true, 
-      promptText 
-    });
+    this.llmClient = new LLMClient({ verbose: this.options.verbose });
+    this.maxSteps = 5;
+    this.currentStep = 1;
     
-    console.log(`📋 Processing prompt: ${promptText.substring(0, 100)}...`);
-    
-    await processIssue(issueContext, config);
-  } catch (error) {
-    console.error('❌ Error:', error.message);
-    process.exit(1);
-  }
-}
-
-async function processIssue(issueContext, config) {
-  // Create a new branch for this work
-  const branchName = generateBranchName(issueContext);
-  console.log(`🌿 Working on branch: ${branchName}`);
-  
-  if (!createBranch(branchName)) {
-    throw new Error('Failed to create/switch to branch');
-  }
-
-  // Main iteration loop
-  let currentStep = 0;
-  while (currentStep < config.maxSteps) {
-    currentStep++;
-    console.log(`\n📍 Step ${currentStep}/${config.maxSteps}`);
-    
-    const shouldContinue = await executeStep(issueContext, config, currentStep);
-    
-    if (!shouldContinue) {
-      console.log('✅ All done! Ready to create PR.');
-      break;
+    if (this.options.verbose) {
+      console.log('🔍 Verbose mode enabled');
     }
   }
 
-  if (currentStep >= config.maxSteps) {
-    console.log('⚠️ Reached maximum steps. Creating PR with current progress.');
+  async run() {
+    try {
+      // 1. Get input (either direct prompt or GitHub event)
+      const input = await this.getInput();
+      
+      // 2. Generate context
+      const context = await this.generateContext(input);
+      
+      // 3. Build unified prompt
+      const systemPrompt = this.buildPrompt(input, context);
+      
+      // 4. Process with LLM
+      await this.processLLMResponse(systemPrompt);
+      
+    } catch (error) {
+      console.error('❌ Error during execution:', error.message);
+      if (this.options.verbose) {
+        console.error('Stack trace:', error.stack);
+      }
+      throw error;
+    }
   }
 
-  // Create pull request
-  await createPullRequest(branchName, issueContext, config);
-}
-
-async function executeStep(issueContext, config, currentStep) {
-  try {
-    // Generate code
-    console.log('🧠 Generating code...');
-    const response = await generateUnifiedResponse(issueContext, config, currentStep);
-    
-    // Parse and write files
-    const writtenFiles = await parseAndWriteFiles(response, { 
-      logOutput: true 
-    });
-    
-    if (writtenFiles.length === 0) {
-      console.log('⚠️ No files were generated');
-      return false;
-    }
-
-    // Commit the changes
-    const commitMessage = await generateCommitMessage(
-      writtenFiles, 
-      issueContext, 
-      config
-    );
-    
-    const commitSuccess = await commitFiles(writtenFiles, commitMessage);
-    
-    if (!commitSuccess) {
-      console.log('⚠️ Failed to commit files');
-      return false;
-    }
-
-    // Run evaluation if present
-    if (hasEvalScript(response)) {
-      const evalResult = await runEvalScript(response, { 
-        safeMode: !config.yoloMode,
-        yolo: config.yoloMode 
+  async getInput() {
+    if (this.options.prompt) {
+      console.log('🚀 Running in direct prompt mode');
+      if (this.options.verbose) {
+        console.log('📝 Prompt:', this.options.prompt);
+      }
+      return await getIssueContext(null, { 
+        promptMode: true, 
+        promptText: this.options.prompt 
       });
-      
-      if (evalResult.skipped) {
-        console.log('⏸️ Eval skipped - assuming ready for PR');
-        return false;
-      }
-      
-      if (evalResult.success) {
-        console.log('✅ Evaluation passed - ready for PR');
-        return false;
-      } else {
-        console.log('🔄 Evaluation failed - continuing to next step');
-        console.log(`📋 Eval output: ${evalResult.output}`);
-        return true;
-      }
-    } else {
-      console.log('✅ No evaluation script - assuming complete');
-      return false;
     }
     
-  } catch (error) {
-    console.error(`❌ Step ${currentStep} failed:`, error.message);
-    return false;
-  }
-}
-
-async function generateUnifiedResponse(issueContext, config, currentStep) {
-  // Get repository context
-  const repoContext = await getRepoContext({ 
-    maxFiles: 100 
-  });
-  
-  // Extract mentioned files from issue/comment
-  const mentionedFiles = extractMentionedFiles(issueContext.description || '');
-  let mentionedContent = '';
-  
-  if (mentionedFiles.length > 0) {
-    console.log(`📂 Found mentioned files: ${mentionedFiles.join(', ')}`);
-    mentionedContent = await getMentionedFilesContent(mentionedFiles);
+    // GitHub mode
+    console.log('📋 Processing GitHub event');
+    return await getIssueContext();
   }
 
-  // Build the unified prompt
-  const prompt = `You are a professional software developer. I need you to help with this task:
+  async generateContext(input) {
+    return await getRepoContext({ 
+      maxFiles: 50,
+      includeGitFiles: true 
+    });
+  }
 
-## Task
-${issueContext.title}
+  buildPrompt(input, context) {
+    const taskSection = input.number 
+      ? `## GitHub Issue #${input.number}\n**Title:** ${input.title}\n**Description:**\n${input.description}`
+      : `## Task\n${input.description}`;
 
-## Description  
-${issueContext.description || issueContext.body || 'No description provided'}
+    return `You are a professional software developer. Help with this request:
+
+${taskSection}
 
 ## Repository Context
-${repoContext}
-
-${mentionedContent ? `## Referenced Files\n${mentionedContent}` : ''}
+${context}
 
 ## Instructions
 1. Analyze the request and repository structure
-2. Generate complete file contents using this EXACT format:
+2. **IMPORTANT**: When modifying existing files, you MUST read their current contents first:
+   - Either include existing file contents in your analysis
+   - Or use \`cat filename\` in your evaluation script to read files before modifying
+   - Never blindly overwrite files without knowing their current state
+3. Generate complete file contents using this EXACT format:
 
 === FILENAME: path/to/file.ext ===
 [complete file content here]
 === END: path/to/file.ext ===
 
-3. Include an evaluation script at the end to test if the solution works:
+4. Include an evaluation script at the end to test if the solution works:
 
 \`\`\`bash
 # EVAL
@@ -208,75 +104,132 @@ set -euo pipefail
 # Exit 0 if ready for PR, non-zero if needs more work
 echo "Checking implementation..."
 
-# Example checks:
-# - Run tests if they exist
-# - Check file syntax
-# - Validate functionality
-# - Run build commands
+# Example: Read files before modifying
+# cat existing-file.js
+# Run tests, syntax checks, etc.
 
 echo "✅ All checks passed"
 exit 0
 \`\`\`
 
 ## Current Step
-This is step ${currentStep} of up to ${config.maxSteps} steps. Make meaningful progress toward completing the task.
+This is step ${this.currentStep} of up to ${this.maxSteps} steps. Make meaningful progress toward completing the task.
 
 Generate the code now:`;
+  }
 
-  const messages = [{ role: 'user', content: prompt }];
-  
-  return await callLLM(messages, {
-    ...config,
-    maxTokens: 64000,
-    temperature: 0.1
-  });
-}
+  async processLLMResponse(systemPrompt) {
+    while (this.currentStep <= this.maxSteps) {
+      console.log(`\n🔄 Step ${this.currentStep}/${this.maxSteps}`);
+      
+      if (this.options.verbose) {
+        console.log('\n📤 LLM Input:');
+        console.log('=' .repeat(80));
+        console.log(systemPrompt);
+        console.log('=' .repeat(80));
+      }
 
-async function createPullRequest(branchName, issueContext, config) {
-  const title = `${issueContext.title} (AI Generated)`;
-  
-  console.log('\n🚀 Creating pull request...');
-  
-  const success = await pushAndCreatePR(branchName, title, issueContext, {
-    createPR: true,
-    pushFirst: true,
-    dryRun: false
-  });
-  
-  if (success) {
-    console.log('✅ Pull request workflow complete!');
-  } else {
-    console.log('⚠️ PR creation had issues - check output above');
+      const response = await this.llmClient.generateResponse(systemPrompt);
+      
+      if (this.options.verbose) {
+        console.log('\n📥 LLM Output:');
+        console.log('=' .repeat(80));
+        console.log(response);
+        console.log('=' .repeat(80));
+      }
+
+      // Process files from response
+      const writtenFiles = await parseAndWriteFiles(response, { 
+        logOutput: true 
+      });
+
+      // Extract and run evaluation script
+      const evalResult = await runEvalScript(response, { 
+        safeMode: !this.options.yolo,
+        yolo: this.options.yolo,
+        logOutput: true
+      });
+
+      if (evalResult.skipped) {
+        console.log('⏸️ Eval skipped - assuming ready for PR');
+        break;
+      }
+
+      if (evalResult.success) {
+        console.log('✅ Evaluation passed! Ready for PR.');
+        break;
+      }
+
+      this.currentStep++;
+      if (this.currentStep > this.maxSteps) {
+        console.log('⚠️ Reached maximum steps. Creating PR with current progress.');
+        break;
+      }
+
+      // Update system prompt for next iteration
+      systemPrompt = `Continue working on the task. This is step ${this.currentStep} of ${this.maxSteps}.
+
+Previous response:
+${response}
+
+Previous eval result: ${evalResult.output}
+
+What needs to be done next? Generate any additional files or improvements needed.`;
+    }
+
+    await this.createCommit();
+  }
+
+  async createCommit() {
+    try {
+      // Check if we're in a git repository
+      execSync('git rev-parse --git-dir', { stdio: 'ignore' });
+      
+      // Check if there are any changes to commit
+      const status = execSync('git status --porcelain', { encoding: 'utf8' });
+      if (!status.trim()) {
+        console.log('📝 No changes to commit');
+        return;
+      }
+
+      console.log('📝 Creating commit...');
+      
+      // Add all changes
+      execSync('git add .', { stdio: 'inherit' });
+      
+      // Generate commit message
+      const commitMessage = await this.generateCommitMessage();
+      
+      if (this.options.verbose) {
+        console.log('💬 Commit message:', commitMessage);
+      }
+      
+      // Create commit
+      execSync(`git commit -m "${commitMessage}"`, { stdio: 'inherit' });
+      console.log('✅ Commit created successfully');
+      
+    } catch (error) {
+      if (this.options.verbose) {
+        console.log('ℹ️ Git commit skipped:', error.message);
+      } else {
+        console.log('ℹ️ Git commit skipped (not in git repo or no changes)');
+      }
+    }
+  }
+
+  async generateCommitMessage() {
+    const prompt = "Generate a concise git commit message for the changes made. Respond with just the commit message, no explanation.";
+    
+    try {
+      const message = await this.llmClient.generateResponse(prompt, { useCommitModel: true });
+      return message.trim().replace(/"/g, '\\"');
+    } catch (error) {
+      if (this.options.verbose) {
+        console.log('⚠️ Failed to generate commit message:', error.message);
+      }
+      return "AI-generated code changes";
+    }
   }
 }
 
-async function promptUser(question, config) {
-  if (config.yoloMode) {
-    console.log(`🚀 YOLO mode: Auto-answering "${question}" with YES`);
-    return true;
-  }
-
-  const readline = require('readline').createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-
-  const answer = await new Promise(resolve => {
-    readline.question(`${question} (y/N): `, resolve);
-  });
-  
-  readline.close();
-  
-  return answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes';
-}
-
-module.exports = {
-  main,
-  mainWithPrompt,
-  processIssue,
-  executeStep,
-  generateUnifiedResponse,
-  createPullRequest,
-  promptUser,
-  createConfig
-};
+module.exports = { AICoder };

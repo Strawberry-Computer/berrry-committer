@@ -1,110 +1,140 @@
-const fs = require('fs').promises;
-const { execSync } = require('child_process');
+class LLMClient {
+  constructor(options = {}) {
+    this.options = {
+      verbose: false,
+      ...options
+    };
+    
+    this.apiKey = process.env.ANTHROPIC_API_KEY || process.env.OPENROUTER_API_KEY;
+    this.model = process.env.MODEL || 'anthropic/claude-sonnet-4';
+    this.commitModel = process.env.COMMIT_MODEL || 'anthropic/claude-3.5-haiku';
+    this.apiUrl = process.env.API_URL || 'https://openrouter.ai/api/v1/chat/completions';
+    
+    if (!this.apiKey) {
+      throw new Error('API key required. Set ANTHROPIC_API_KEY or OPENROUTER_API_KEY environment variable.');
+    }
 
-async function callLLM(messages, options = {}) {
-  const {
-    apiKey = process.env.ANTHROPIC_API_KEY || process.env.OPENROUTER_API_KEY,
-    model = 'anthropic/claude-sonnet-4',
-    apiUrl = process.env.API_URL || 'https://openrouter.ai/api/v1/chat/completions',
-    maxTokens = 64000,
-    temperature = 0.1
-  } = options;
+    // Use Anthropic API if we have that key
+    if (process.env.ANTHROPIC_API_KEY) {
+      this.apiUrl = 'https://api.anthropic.com/v1/messages';
+      this.isAnthropic = true;
+    }
 
-  if (!apiKey) {
-    throw new Error('API key required. Set ANTHROPIC_API_KEY or OPENROUTER_API_KEY');
+    if (this.options.verbose) {
+      console.log('🔧 LLM Client configured:');
+      console.log(`  - Model: ${this.model}`);
+      console.log(`  - Commit Model: ${this.commitModel}`);
+      console.log(`  - API URL: ${this.apiUrl}`);
+      console.log(`  - Provider: ${this.isAnthropic ? 'Anthropic' : 'OpenRouter'}`);
+    }
   }
 
-  const requestBody = {
-    model,
-    messages,
-    max_tokens: maxTokens,
-    temperature
-  };
+  async generateResponse(prompt, options = {}) {
+    const model = options.useCommitModel ? this.commitModel : this.model;
+    
+    if (this.options.verbose) {
+      console.log(`\n🤖 Making LLM request to ${model}...`);
+      console.log(`📊 Prompt length: ${prompt.length} characters`);
+    }
 
-  console.log(`🧠 Calling ${model}...`);
-  
-  try {
-    const response = await fetch(apiUrl, {
+    try {
+      if (this.isAnthropic) {
+        return await this.callAnthropicAPI(prompt, model);
+      } else {
+        return await this.callOpenRouterAPI(prompt, model);
+      }
+    } catch (error) {
+      console.error('❌ LLM API call failed:', error.message);
+      if (this.options.verbose) {
+        console.error('Full error:', error);
+      }
+      throw error;
+    }
+  }
+
+  async callAnthropicAPI(prompt, model) {
+    const response = await fetch(this.apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://github.com/Strawberry-Computer/berrry-committer',
-        'X-Title': 'Berrry Committer'
+        'x-api-key': this.apiKey,
+        'anthropic-version': '2023-06-01'
       },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify({
+        model: model.replace('anthropic/', ''),
+        max_tokens: 4000,
+        messages: [
+          {
+            role: 'user',
+            content: prompt
+          }
+        ]
+      })
     });
 
     if (!response.ok) {
-      const errorData = await response.text();
-      throw new Error(`API request failed: ${response.status} ${response.statusText} - ${errorData}`);
+      const errorText = await response.text();
+      if (this.options.verbose) {
+        console.error('API Error Response:', errorText);
+      }
+      throw new Error(`Anthropic API error: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
     
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      throw new Error('Invalid API response format');
+    if (this.options.verbose) {
+      console.log('✅ LLM response received');
+      console.log(`📊 Response length: ${data.content[0].text.length} characters`);
+      if (data.usage) {
+        console.log(`🔢 Token usage: ${data.usage.input_tokens} input, ${data.usage.output_tokens} output`);
+      }
+    }
+    
+    return data.content[0].text;
+  }
+
+  async callOpenRouterAPI(prompt, model) {
+    const response = await fetch(this.apiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://github.com/Strawberry-Computer/berrry-committer',
+        'X-Title': 'Berrry Committer'
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        max_tokens: 4000,
+        temperature: 0.1
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      if (this.options.verbose) {
+        console.error('API Error Response:', errorText);
+      }
+      throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}`);
     }
 
-    const content = data.choices[0].message.content;
-    console.log(`✅ LLM response: ${content.substring(0, 100)}...`);
+    const data = await response.json();
     
-    return content;
-  } catch (error) {
-    console.error('❌ LLM call failed:', error.message);
-    throw error;
+    if (this.options.verbose) {
+      console.log('✅ LLM response received');
+      console.log(`📊 Response length: ${data.choices[0].message.content.length} characters`);
+      if (data.usage) {
+        console.log(`🔢 Token usage: ${data.usage.prompt_tokens} input, ${data.usage.completion_tokens} output`);
+      }
+    }
+    
+    return data.choices[0].message.content;
   }
 }
 
-async function generateCommitMessage(files, issueContext, options = {}) {
-  const {
-    model = 'anthropic/claude-3.5-haiku',
-    apiKey,
-    includeStats = true
-  } = options;
-
-  try {
-    // Get git context
-    const gitDiff = execSync('git diff --cached', { encoding: 'utf8' });
-    const gitLog = execSync('git log --oneline -5', { encoding: 'utf8' });
-    const gitStats = includeStats ? execSync('git diff --stat --cached', { encoding: 'utf8' }) : '';
-
-    const prompt = `Generate a concise git commit message for these changes:
-
-Issue Title: ${issueContext.title || 'Direct prompt'}
-Issue Description: ${issueContext.description || issueContext.body || 'N/A'}
-
-Git Diff:
-${gitDiff}
-
-Recent Commits:
-${gitLog}
-
-${gitStats ? `Change Stats:\n${gitStats}\n` : ''}
-
-Files modified: ${files.join(', ')}
-
-Generate a conventional commit message. Be descriptive but concise.`;
-
-    const message = await callLLM(
-      [{ role: 'user', content: prompt }], 
-      { model, apiKey, maxTokens: 1024 }
-    );
-
-    // Clean up the response and add issue reference
-    const cleanMessage = message.replace(/^["']|["']$/g, '').trim();
-    const issueRef = issueContext.number ? `\n\nCloses #${issueContext.number}` : '';
-    
-    return cleanMessage + issueRef;
-  } catch (error) {
-    console.error('❌ Commit message generation failed:', error.message);
-    // Fallback to basic message
-    const fallbackMessage = `feat: Update ${files.length} files`;
-    return issueContext.number ? `${fallbackMessage}\n\nCloses #${issueContext.number}` : fallbackMessage;
-  }
-}
-
-module.exports = {
-  callLLM,
-  generateCommitMessage
-};
+module.exports = { LLMClient };
