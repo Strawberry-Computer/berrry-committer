@@ -105,6 +105,11 @@ Generate complete file contents using this EXACT format:
 [complete file content here]
 === END: path/to/file.ext ===
 
+=== FILENAME: eval.sh ===
+[complete eval script here]
+=== END: eval.sh ===
+
+
 For deleted files just include empty file.
 
 Include an evaluation script at the end
