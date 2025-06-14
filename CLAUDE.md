@@ -62,15 +62,7 @@ node script.js
 
 ## Code Generation Format
 
-The LLM must output code in this exact format:
-
-```
-=== FILENAME: path/to/file.ext ===
-[complete file content]
-=== END: path/to/file.ext ===
-```
-
-Multiple files can be generated in a single response. The system automatically creates directories and writes files.
+The LLM outputs files using filename markers with complete file content. Multiple files can be generated in a single response. The system automatically creates directories and writes files.
 
 ## Evaluation System
 

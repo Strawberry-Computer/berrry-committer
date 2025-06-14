@@ -1,0 +1,25 @@
+I'll help you create a simple React component.
+
+=== FILENAME: src/components/Button.js ===
+import React from 'react';
+
+const Button = ({ children, onClick, disabled = false }) => {
+  return (
+    <button 
+      onClick={onClick}
+      disabled={disabled}
+      className="btn btn-primary"
+    >
+      {children}
+    </button>
+  );
+};
+
+export default Button;
+=== END: src/components/Button.js ===
+
+=== FILENAME: path/to/file.ext ===
+[complete file content]
+=== END: path/to/file.ext ===
+
+The component is now ready to use!
