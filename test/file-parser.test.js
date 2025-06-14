@@ -49,20 +49,6 @@ content here
   t.end();
 });
 
-test('handle missing END markers', async (t) => {
-  const responseWithoutEnd = `=== FILENAME: incomplete.js ===
-console.log('no end marker');
-// more content`;
-
-  const result = await parseAndWriteFiles(responseWithoutEnd, { 
-    logOutput: false,
-    dryRun: true 
-  });
-
-  t.ok(result.includes('incomplete.js'), 'should handle missing END marker');
-  t.end();
-});
-
 test('handle multiple files correctly', async (t) => {
   const multiFileResponse = `=== FILENAME: file1.js ===
 // file 1
@@ -83,8 +69,9 @@ test('handle multiple files correctly', async (t) => {
   t.end();
 });
 
-test('handle empty file content', async (t) => {
+test('handle empty file content with proper markers', async (t) => {
   const emptyFileResponse = `=== FILENAME: empty.txt ===
+
 === END: empty.txt ===`;
 
   const result = await parseAndWriteFiles(emptyFileResponse, { 
@@ -92,6 +79,84 @@ test('handle empty file content', async (t) => {
     dryRun: true 
   });
 
-  t.ok(result.includes('empty.txt'), 'should handle empty files');
+  t.ok(result.includes('empty.txt'), 'should handle empty files with proper END markers');
+  t.end();
+});
+
+test('strict parsing: reject files without END markers', async (t) => {
+  const responseWithoutEnd = `=== FILENAME: incomplete.js ===
+console.log('no end marker');
+// more content`;
+
+  const result = await parseAndWriteFiles(responseWithoutEnd, { 
+    logOutput: false,
+    dryRun: true 
+  });
+
+  t.equal(result.length, 0, 'should reject files without proper END markers');
+  t.end();
+});
+
+test('robust parsing: reject mismatched filename markers', async (t) => {
+  const mismatchedResponse = `=== FILENAME: correct.js ===
+console.log('correct');
+=== END: wrong.js ===
+
+=== FILENAME: valid.py ===
+print('valid')
+=== END: valid.py ===`;
+
+  const result = await parseAndWriteFiles(mismatchedResponse, { 
+    logOutput: false,
+    dryRun: true 
+  });
+
+  // Should only find the valid.py file, not the mismatched one
+  t.equal(result.length, 1, 'should only find 1 valid file');
+  t.ok(result.includes('valid.py'), 'should include valid.py');
+  t.notOk(result.includes('correct.js'), 'should reject mismatched filename');
+  t.end();
+});
+
+test('robust parsing: handle intersecting blocks by keeping outermost', async (t) => {
+  const intersectingResponse = `=== FILENAME: outer.js ===
+// Outer file start
+=== FILENAME: inner.js ===
+// Inner file content
+=== END: inner.js ===
+// Outer file end
+=== END: outer.js ===`;
+
+  const result = await parseAndWriteFiles(intersectingResponse, { 
+    logOutput: false,
+    dryRun: true 
+  });
+
+  // Should only keep the outermost block (outer.js), not the inner one
+  t.equal(result.length, 1, 'should only find 1 file (outermost)');
+  t.ok(result.includes('outer.js'), 'should include outer.js');
+  t.notOk(result.includes('inner.js'), 'should not include nested inner.js');
+  t.end();
+});
+
+test('robust parsing: handle multiple non-intersecting blocks', async (t) => {
+  const multipleResponse = `=== FILENAME: first.js ===
+console.log('first');
+=== END: first.js ===
+
+Some text between files
+
+=== FILENAME: second.py ===
+print('second')
+=== END: second.py ===`;
+
+  const result = await parseAndWriteFiles(multipleResponse, { 
+    logOutput: false,
+    dryRun: true 
+  });
+
+  t.equal(result.length, 2, 'should find 2 separate files');
+  t.ok(result.includes('first.js'), 'should include first.js');
+  t.ok(result.includes('second.py'), 'should include second.py');
   t.end();
 });

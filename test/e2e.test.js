@@ -10,7 +10,7 @@ class E2ETestRunner {
     this.testCases = [];
     this.results = [];
     this.baseDir = path.join(__dirname, '..');
-    this.scriptPath = path.join(this.baseDir, 'script.js');
+    this.scriptPath = path.join(this.baseDir, 'bin', 'berrry');
   }
 
   async setup() {
@@ -23,7 +23,7 @@ class E2ETestRunner {
   }
 
   async createTempRepo() {
-    // Create temporary directory
+    // Create temporary directory for test project
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'berrry-test-'));
     
     // Initialize git repo
@@ -31,33 +31,12 @@ class E2ETestRunner {
     execSync('git config user.email "test@example.com"', { cwd: tempDir });
     execSync('git config user.name "Test User"', { cwd: tempDir });
     
-    // Copy all required files to temp repo
-    const filesToCopy = [
-      'script.js',
-      'package.json', 
-      'test/e2e.test.js'
-    ];
-    
-    for (const file of filesToCopy) {
-      const sourcePath = path.join(this.baseDir, file);
-      const destPath = path.join(tempDir, file);
-      
-      try {
-        await fs.access(sourcePath);
-        // Create directory if needed
-        const destDir = path.dirname(destPath);
-        await fs.mkdir(destDir, { recursive: true });
-        // Copy file
-        await fs.copyFile(sourcePath, destPath);
-      } catch (e) {
-        // File doesn't exist, skip
-        console.warn(`Skipping ${file}: ${e.message}`);
-      }
-    }
+    // Create a simple README to have something to commit
+    await fs.writeFile(path.join(tempDir, 'README.md'), '# Test Project\n\nThis is a test repository for e2e testing.');
     
     // Create initial commit
     execSync('git add .', { cwd: tempDir });
-    execSync('git commit -m "Add project files for testing"', { cwd: tempDir });
+    execSync('git commit -m "Initial commit"', { cwd: tempDir });
     
     return tempDir;
   }
@@ -108,13 +87,13 @@ class E2ETestRunner {
         // GitHub event flow
         const eventPath = await this.createMockEvent(testCase.issueData, tempDir);
         env.GITHUB_EVENT_PATH = eventPath;
-        scriptCommand = 'node script.js';
+        scriptCommand = `node ${this.scriptPath}`;
       } else {
         // Direct prompt flow
         const promptText = typeof testCase.issueData === 'string' 
           ? testCase.issueData 
           : testCase.issueData.body;
-        scriptCommand = `node script.js -p "${promptText}"`;
+        scriptCommand = `node ${this.scriptPath} -p "${promptText}"`;
       }
       
       // Run the script with timeout
@@ -234,7 +213,10 @@ async function setupTests() {
     {
       number: 1,
       title: 'Create hello world page',
-      body: 'Please create a simple HTML page that says "Hello World" with some basic styling'
+      body: 'Please create a simple HTML page that says "Hello World" with some basic styling',
+      user: {
+        login: 'testuser'
+      }
     },
     ['index.html'],
     async (tempDir) => {
