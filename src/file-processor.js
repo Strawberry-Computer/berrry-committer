@@ -10,43 +10,37 @@ async function parseAndWriteFiles(response, options = {}) {
   } = options;
 
   const files = [];
-  const lines = response.split('\n');
-  let currentFile = null;
-  let currentContent = [];
-  let inFile = false;
+  
+  // Use robust parsing algorithm with regex and backreferences
+  const fileRegex = /=== FILENAME: (.+?) ===\s*\n([\s\S]*?)\n=== END: \1 ===/g;
+  let match;
+  const foundRanges = [];
 
-  for (const line of lines) {
-    if (line.startsWith('=== FILENAME: ')) {
-      // Start of a new file
-      if (currentFile && inFile) {
-        // Save previous file
-        const content = currentContent.join('\n');
-        files.push({ path: currentFile, content });
-      }
-      
-      // Extract filename properly - remove prefix and suffix markers
-      currentFile = line.replace('=== FILENAME: ', '').replace(/ +===.*$/, '').trim();
-      currentContent = [];
-      inFile = true;
-    } else if (line.startsWith('=== END: ')) {
-      // End of current file
-      if (currentFile && inFile) {
-        const content = currentContent.join('\n');
-        files.push({ path: currentFile, content });
-      }
-      currentFile = null;
-      currentContent = [];
-      inFile = false;
-    } else if (inFile) {
-      // Content line
-      currentContent.push(line);
-    }
+  // First pass: find all valid ranges using backreference validation
+  while ((match = fileRegex.exec(response)) !== null) {
+    const filename = match[1].trim();
+    const content = match[2].trim();
+    
+    foundRanges.push({
+      filename,
+      content,
+      start: match.index,
+      end: match.index + match[0].length
+    });
   }
-
-  // Handle case where file doesn't have explicit END marker
-  if (currentFile && inFile && currentContent.length > 0) {
-    const content = currentContent.join('\n');
-    files.push({ path: currentFile, content });
+  
+  // Second pass: remove ranges that are contained within other ranges
+  const outerRanges = foundRanges.filter(range => {
+    return !foundRanges.some(other => 
+      other !== range && 
+      other.start < range.start && 
+      other.end > range.end
+    );
+  });
+  
+  // Convert to the format expected by the rest of the function
+  for (const range of outerRanges) {
+    files.push({ path: range.filename, content: range.content });
   }
 
   if (files.length === 0) {
