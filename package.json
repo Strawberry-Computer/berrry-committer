@@ -13,7 +13,9 @@
     "CLAUDE.md"
   ],
   "scripts": {
-    "test": "node test/e2e.test.js",
+    "test": "node test/file-parser.test.js && node test/e2e.test.js",
+    "test:unit": "node test/file-parser.test.js",
+    "test:e2e": "node test/e2e.test.js",
     "test:clean": "rm -rf test-output generated && npm test",
     "lint": "echo 'No linter configured'",
     "start": "node bin/berrry",
@@ -35,6 +37,8 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "tape": "^5.9.0"
+  },
   "dependencies": {}
 }
