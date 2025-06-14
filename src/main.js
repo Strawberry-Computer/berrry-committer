@@ -76,46 +76,57 @@ class AICoder {
 
     return `You are a professional software developer. Help with this request:
 
+<task>
 ${taskSection}
+</task>
 
-## Repository Context
+<context>
 ${context}
+</context>
 
-## Instructions
-1. Analyze the request and repository structure
-2. **IMPORTANT**: When modifying existing files, you MUST read their current contents first:
-   - Either include existing file contents in your analysis
-   - Or use \`cat filename\` in your evaluation script to read files before modifying
-   - Never blindly overwrite files without knowing their current state
-3. Generate complete file contents using this EXACT format:
+<instructions>
+Analyze the request and repository structure. 
+
+Think what files need to be:
+- observed
+- modified
+- created
+- deleted
+
+IMPORTANT: When modifying existing files, you MUST read their current contents first:
+   - It's already included in the context
+   - Or need to use \`cat filename\` in eval script to read files before modifying them in next step.
+
+It's ok to just respond with a plan and eval script and not generate any files.
+
+Generate complete file contents using this EXACT format:
 
 === FILENAME: path/to/file.ext ===
 [complete file content here]
 === END: path/to/file.ext ===
 
-4. Include an evaluation script at the end to test if the solution works:
+For deleted files just include empty file.
 
-\`\`\`bash
-# EVAL
+Include an evaluation script at the end
+
+<sample_eval_script>
 #!/bin/bash
 set -euo pipefail
 
-# Add your validation logic here
-# Exit 0 if ready for PR, non-zero if needs more work
-echo "Checking implementation..."
+# Read files before modifying
+cat existing-file.js
 
-# Example: Read files before modifying
-# cat existing-file.js
-# Run tests, syntax checks, etc.
+# Grep to find more files to read
+grep "TODO" -R src/
 
-echo "✅ All checks passed"
-exit 0
-\`\`\`
+# Exit 1 as we need more steps when not ready for PR
+exit 1
+
+# In a later step, you can add more validation logic here instead of exiting 1
+</sample_eval_script>
 
 ## Current Step
-This is step ${this.currentStep} of up to ${this.maxSteps} steps. Make meaningful progress toward completing the task.
-
-Generate the code now:`;
+This is step ${this.currentStep} of up to ${this.maxSteps} steps. Make meaningful progress toward completing the task.`;
   }
 
   async processLLMResponse(systemPrompt) {
