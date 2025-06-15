@@ -2,13 +2,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const { execSync } = require('child_process');
 
-async function parseAndWriteFiles(response, options = {}) {
-  const { 
-    dryRun = false,
-    createDirectories = true,
-    logOutput = true 
-  } = options;
-
+function parseFiles(response) {
   const files = [];
   
   // Use robust parsing algorithm with regex and backreferences
@@ -43,6 +37,18 @@ async function parseAndWriteFiles(response, options = {}) {
     files.push({ path: range.filename, content: range.content });
   }
 
+  return files;
+}
+
+async function parseAndWriteFiles(response, options = {}) {
+  const { 
+    dryRun = false,
+    createDirectories = true,
+    logOutput = true 
+  } = options;
+
+  const files = parseFiles(response);
+
   if (files.length === 0) {
     if (logOutput) console.log('⚠️ No files found in LLM response');
     return [];
@@ -56,10 +62,17 @@ async function parseAndWriteFiles(response, options = {}) {
     return files.map(f => f.path);
   }
 
-  // Write files
+  // Write files (skip eval.sh)
   const writtenFiles = [];
   
   for (const file of files) {
+    if (file.path === 'eval.sh') {
+      if (logOutput) {
+        console.log(`⏭️ Skipped: ${file.path} (will be executed, not written)`);
+      }
+      continue;
+    }
+    
     try {
       if (createDirectories) {
         const dir = path.dirname(file.path);
@@ -96,15 +109,16 @@ async function runEvalScript(response, options = {}) {
     yolo = process.env.YOLO === 'true'
   } = options;
 
-  // Extract eval script from response
-  const evalMatch = response.match(/```(?:bash|sh)?\s*\n# EVAL\s*\n([\s\S]*?)```/);
+  // Get eval.sh from parsed files
+  const files = parseFiles(response);
+  const evalFile = files.find(f => f.path === 'eval.sh');
   
-  if (!evalMatch) {
+  if (!evalFile) {
     if (logOutput) console.log('⚠️ No eval script found in response');
-    return { success: true, output: 'No eval script' };
+    return { success: true, output: 'No eval script', skipped: true };
   }
 
-  const evalScript = evalMatch[1].trim();
+  const evalScript = evalFile.content;
   
   if (!evalScript) {
     if (logOutput) console.log('⚠️ Empty eval script');
@@ -203,6 +217,7 @@ function hasEvalScript(response) {
 }
 
 module.exports = {
+  parseFiles,
   parseAndWriteFiles,
   runEvalScript,
   extractEvalScript,
