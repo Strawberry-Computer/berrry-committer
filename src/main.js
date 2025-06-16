@@ -52,6 +52,7 @@ exit 1
 </sample_eval_script>`;
 
 const formatTask = (input) => {
+  if (!input) throw new Error("Input is required for formatTask");
   return input.number 
     ? `GitHub Issue #${input.number}\nTitle: ${input.title}\nDescription:\n${input.description}`
     : input.description;
@@ -77,13 +78,13 @@ class AICoder {
   async run() {
     try {
       // 1. Get input (either direct prompt or GitHub event)
-      const input = await this.getInput();
+      this.input = await this.getInput();
       
       // 2. Generate context
-      const context = await this.generateContext(input);
+      this.context = await this.generateContext(this.input);
       
       // 3. Build unified prompt
-      const systemPrompt = this.buildPrompt(input, context);
+      const systemPrompt = this.buildPrompt(this.input, this.context);
       
       // 4. Process with LLM
       await this.processLLMResponse(systemPrompt);
