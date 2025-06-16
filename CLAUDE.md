@@ -2,14 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Project: Berrry Committer
+
+Berrry Committer is an AI-powered GitHub automation tool that processes issues and generates code automatically.
+
 ## Core Architecture
 
-This is an AI-powered GitHub automation tool that operates in two modes:
+Berrry Committer is an AI-powered GitHub automation tool that operates in two modes:
 
 1. **GitHub Actions Mode**: Automatically processes GitHub issues/comments and generates code
 2. **Local Development Mode**: Interactive development with manual confirmations
 
-The main entry point is `script.js` - a Node.js application that:
+The main entry point is `src/main.js` via the `berrry` CLI - a Node.js application that:
 - Parses GitHub event context from issues/comments
 - Uses LLM calls to generate code responses
 - Creates files based on LLM output in a specific format
@@ -18,7 +22,7 @@ The main entry point is `script.js` - a Node.js application that:
 
 ### Key Components
 
-- **AICoder Class**: Main orchestrator class in script.js
+- **AICoder Class**: Main orchestrator class in src/main.js
 - **API Integration**: Uses OpenRouter or Anthropic API for LLM calls
 - **File Generation**: Parses `=== FILENAME: path ===` format from LLM responses
 - **Evaluation System**: Runs bash scripts to validate progress
@@ -52,8 +56,8 @@ cat > /tmp/github_event.json << 'EOF'
 }
 EOF
 
-# Run the script
-node script.js
+# Run Berrry Committer
+berrry
 ```
 
 ### Execution Modes
@@ -90,7 +94,9 @@ The system automatically includes context from:
 - Commits are created after each step
 - Branch naming: `ai/issue-title-normalized`
 - Auto-detects GitHub Actions vs local environment
-- Uses git config: `action@github.com` / `FastClaude AI` for commits
+- Uses git config: `action@github.com` / `Berrry Committer AI` for commits
 
 ## Development Guidance
 - Let's always run tests in tmp git repo instead of our repo
+- Remember to use consistent "Berrry Committer" branding throughout the codebase
+- The CLI command is `berrry` and the main entry point is `src/main.js`

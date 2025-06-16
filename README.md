@@ -17,9 +17,9 @@ AI-powered GitHub automation tool that processes issues and generates code autom
 1. **Add Repository Secrets**:
    - `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY`
 
-2. **Create Workflow** (`.github/workflows/ai-coder.yml`):
+2. **Create Workflow** (`.github/workflows/berrry-committer.yml`):
 ```yaml
-name: AI Coder
+name: Berrry Committer
 on:
   issues:
     types: [opened, edited]
@@ -27,21 +27,21 @@ on:
     types: [created]
 
 jobs:
-  ai-code:
+  berrry-committer:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '18'
-      - name: Run AI Coder
+      - name: Run Berrry Committer
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node script.js
+        run: node src/main.js
 ```
 
-3. **Create an Issue**: Mention `@fastclaude` or describe your coding request
+3. **Create an Issue**: Describe your coding request to trigger Berrry Committer
 
 ### Local Development
 
@@ -50,7 +50,7 @@ jobs:
 export ANTHROPIC_API_KEY="your-api-key"
 
 # 2. Direct prompting mode (new!)
-node script.js -p "Create a login component with email/password validation"
+berrry --prompt "Create a login component with email/password validation"
 
 # 3. GitHub event mode
 export GITHUB_EVENT_PATH="/tmp/test_event.json"
@@ -63,10 +63,10 @@ cat > /tmp/test_event.json << 'EOF'
   }
 }
 EOF
-node script.js
+berrry
 
 # 4. Or run in YOLO mode (auto-execute)
-YOLO=true node script.js
+berrry --yolo
 ```
 
 ## 🛠️ Configuration
@@ -102,7 +102,7 @@ export API_URL="https://your-proxy.com/v1/chat/completions"
 
 1. **Issue Processing**: Parses GitHub issue/comment for coding requests
 2. **Context Gathering**: Automatically includes relevant files and repository structure
-3. **Code Generation**: Uses Claude to generate complete solutions with analysis
+3. **Code Generation**: Uses AI models to generate complete solutions with analysis
 4. **File Creation**: Writes files using the `=== FILENAME: path ===` format
 5. **Evaluation**: Runs bash scripts to validate and determine if more work is needed
 6. **Iteration**: Continues refining until solution is complete (max 5 steps)
@@ -136,7 +136,7 @@ exit 0
 ### Simple Feature Request
 ```
 Title: Add dark mode toggle
-Body: @fastclaude Please add a dark mode toggle to the settings page
+Body: Please add a dark mode toggle to the settings page
 ```
 
 ### Complex Implementation
@@ -191,12 +191,12 @@ chmod +x eval.sh
 
 Add verbose logging:
 ```bash
-DEBUG=true node script.js
+berrry --verbose
 ```
 
 ## 📖 Documentation
 
-- [CLAUDE.md](./CLAUDE.md) - Technical architecture guide for Claude Code
+- [CLAUDE.md](./CLAUDE.md) - Technical architecture guide for Berrry Committer
 - [dev.md](./dev.md) - Detailed local development guide
 
 ## 🤖 AI-Assisted Development
@@ -204,15 +204,14 @@ DEBUG=true node script.js
 This project uses itself for development! You can request AI-generated code:
 
 ### Quick Start
-1. **Create an issue** with title starting with `ai:` or `claude:`
-2. **Or mention** `@fastclaude` in issue descriptions
-3. **The AI will** analyze, code, test, and create a PR automatically
+1. **Create an issue** describing your coding request
+2. **Berrry Committer will** analyze, code, test, and create a PR automatically
 
 ### Examples
 ```markdown
-ai: Add --version flag support
-@fastclaude Please improve error handling in the parser
-claude: Add Docker configuration for easy deployment
+Add --version flag support
+Please improve error handling in the parser
+Add Docker configuration for easy deployment
 ```
 
 📖 **[Full AI Development Guide](docs/ai-development.md)**
@@ -220,7 +219,7 @@ claude: Add Docker configuration for easy deployment
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create your feature branch (or use AI with `@fastclaude`)
+2. Create your feature branch (or use Berrry Committer)
 3. Test locally with `npm test`
 4. Submit a pull request
 
