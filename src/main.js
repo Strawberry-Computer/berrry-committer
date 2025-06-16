@@ -5,6 +5,58 @@ const { LLMClient } = require('./llm-client.js');
 const { getIssueContext, getRepoContext } = require('./context-generator.js');
 const { parseAndWriteFiles, runEvalScript } = require('./file-processor.js');
 
+const SYSTEM_PROMPT = "You are a professional software developer. Help with this request:";
+
+const INSTRUCTIONS = `Analyze the request and repository structure. 
+
+Think what files need to be:
+- observed
+- modified
+- created
+- deleted
+
+IMPORTANT: When modifying existing files, you MUST read their current contents first:
+   - It's already included in the context
+   - Or need to use \`cat filename\` in eval script to read files before modifying them in next step.
+
+It's ok to just respond with a plan and eval script and not generate any files.
+
+Generate complete file contents using this EXACT format:
+
+=== FILENAME: path/to/file.ext ===
+[complete file content here]
+=== END: path/to/file.ext ===
+
+=== FILENAME: eval.sh ===
+[complete eval script here]
+=== END: eval.sh ===
+
+For deleted files just include empty file.
+
+Include an evaluation script at the end
+
+<sample_eval_script>
+#!/bin/bash
+set -euo pipefail
+
+# Read files before modifying
+cat existing-file.js
+
+# Grep to find more files to read
+grep "TODO" -R src/
+
+# Exit 1 as we need more steps when not ready for PR
+exit 1
+
+# In a later step, you can add more validation logic here instead of exiting 1
+</sample_eval_script>`;
+
+const formatTask = (input) => {
+  return input.number 
+    ? `GitHub Issue #${input.number}\nTitle: ${input.title}\nDescription:\n${input.description}`
+    : input.description;
+};
+
 class AICoder {
   constructor(options = {}) {
     this.options = {
@@ -70,68 +122,25 @@ class AICoder {
   }
 
   buildPrompt(input, context) {
-    const taskSection = input.number 
-      ? `## GitHub Issue #${input.number}\n**Title:** ${input.title}\n**Description:**\n${input.description}`
-      : `## Task\n${input.description}`;
-
-    return `You are a professional software developer. Help with this request:
+    return `${SYSTEM_PROMPT}
 
 <task>
-${taskSection}
+${formatTask(input)}
 </task>
+
+<instructions>
+${INSTRUCTIONS}
+</instructions>
+
+<step>
+${this.currentStep}/${this.maxSteps}
+</step>
 
 <context>
 ${context}
 </context>
 
-<instructions>
-Analyze the request and repository structure. 
-
-Think what files need to be:
-- observed
-- modified
-- created
-- deleted
-
-IMPORTANT: When modifying existing files, you MUST read their current contents first:
-   - It's already included in the context
-   - Or need to use \`cat filename\` in eval script to read files before modifying them in next step.
-
-It's ok to just respond with a plan and eval script and not generate any files.
-
-Generate complete file contents using this EXACT format:
-
-=== FILENAME: path/to/file.ext ===
-[complete file content here]
-=== END: path/to/file.ext ===
-
-=== FILENAME: eval.sh ===
-[complete eval script here]
-=== END: eval.sh ===
-
-
-For deleted files just include empty file.
-
-Include an evaluation script at the end
-
-<sample_eval_script>
-#!/bin/bash
-set -euo pipefail
-
-# Read files before modifying
-cat existing-file.js
-
-# Grep to find more files to read
-grep "TODO" -R src/
-
-# Exit 1 as we need more steps when not ready for PR
-exit 1
-
-# In a later step, you can add more validation logic here instead of exiting 1
-</sample_eval_script>
-
-## Current Step
-This is step ${this.currentStep} of up to ${this.maxSteps} steps. Make meaningful progress toward completing the task.`;
+Make meaningful progress toward completing the task.`;
   }
 
   async processLLMResponse(systemPrompt) {
@@ -191,14 +200,33 @@ This is step ${this.currentStep} of up to ${this.maxSteps} steps. Make meaningfu
         evalResultText += '\n\n<stderr>\n' + evalResult.stderr + '\n</stderr>';
       }
       
-      systemPrompt = `Continue working on the task. This is step ${this.currentStep} of ${this.maxSteps}.
+      systemPrompt = `${SYSTEM_PROMPT}
 
-Previous response:
+<task>
+${formatTask(this.input)}
+</task>
+
+<instructions>
+${INSTRUCTIONS}
+</instructions>
+
+<step>
+${this.currentStep}/${this.maxSteps}
+</step>
+
+<context>
+${this.context}
+</context>
+
+<previous_response>
 ${response}
+</previous_response>
 
-Previous eval result: ${evalResultText}
+<eval_result>
+${evalResultText}
+</eval_result>
 
-What needs to be done next? Generate any additional files or improvements needed.`;
+Continue making progress toward completing the task.`;
     }
 
     await this.createCommit();
@@ -242,9 +270,30 @@ What needs to be done next? Generate any additional files or improvements needed
   }
 
   async generateCommitMessage() {
-    const prompt = "Generate a concise git commit message for the changes made. Respond with just the commit message, no explanation.";
-    
     try {
+      // Get git log and diff for context
+      const gitLog = execSync('git log --oneline -5', { encoding: 'utf8' }).trim();
+      const gitDiff = execSync('git diff HEAD', { encoding: 'utf8' }).trim();
+      
+      
+      const prompt = `<task>
+Generate a concise git commit message for the changes made
+</task>
+
+<original_task>
+${formatTask(this.input)}
+</original_task>
+
+<git_log>
+${gitLog}
+</git_log>
+
+<git_diff>
+${gitDiff}
+</git_diff>
+
+Respond with just the commit message, no explanation.`;
+    
       const message = await this.llmClient.generateResponse(prompt, { useCommitModel: true });
       return message.trim().replace(/"/g, '\\"');
     } catch (error) {
