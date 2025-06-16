@@ -8,6 +8,7 @@ class LLMClient {
     this.apiKey = process.env.ANTHROPIC_API_KEY || process.env.OPENROUTER_API_KEY;
     this.model = process.env.MODEL || 'anthropic/claude-sonnet-4';
     this.commitModel = process.env.COMMIT_MODEL || 'anthropic/claude-3.5-haiku';
+    this.maxTokens = parseInt(process.env.MAX_TOKENS) || 64000;
     this.apiUrl = process.env.API_URL || 'https://openrouter.ai/api/v1/chat/completions';
     
     if (!this.apiKey) {
@@ -24,6 +25,7 @@ class LLMClient {
       console.log('🔧 LLM Client configured:');
       console.log(`  - Model: ${this.model}`);
       console.log(`  - Commit Model: ${this.commitModel}`);
+      console.log(`  - Max Tokens: ${this.maxTokens}`);
       console.log(`  - API URL: ${this.apiUrl}`);
       console.log(`  - Provider: ${this.isAnthropic ? 'Anthropic' : 'OpenRouter'}`);
     }
@@ -62,7 +64,7 @@ class LLMClient {
       },
       body: JSON.stringify({
         model: model.replace('anthropic/', ''),
-        max_tokens: 4000,
+        max_tokens: this.maxTokens,
         messages: [
           {
             role: 'user',
@@ -110,7 +112,7 @@ class LLMClient {
             content: prompt
           }
         ],
-        max_tokens: 4000,
+        max_tokens: this.maxTokens,
         temperature: 0.1
       })
     });
