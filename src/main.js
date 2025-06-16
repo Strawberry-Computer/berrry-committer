@@ -183,12 +183,20 @@ This is step ${this.currentStep} of up to ${this.maxSteps} steps. Make meaningfu
       }
 
       // Update system prompt for next iteration
+      let evalResultText = evalResult.output;
+      if (evalResult.stdout) {
+        evalResultText += '\n\n<stdout>\n' + evalResult.stdout + '\n</stdout>';
+      }
+      if (evalResult.stderr) {
+        evalResultText += '\n\n<stderr>\n' + evalResult.stderr + '\n</stderr>';
+      }
+      
       systemPrompt = `Continue working on the task. This is step ${this.currentStep} of ${this.maxSteps}.
 
 Previous response:
 ${response}
 
-Previous eval result: ${evalResult.output}
+Previous eval result: ${evalResultText}
 
 What needs to be done next? Generate any additional files or improvements needed.`;
     }
